@@ -1,0 +1,33 @@
+i learned this my gemini:
+here is the summarised version of our whole chat(made with claude):
+**Encoder kaise kaam karta hai:** Motor ke peeche A aur B do sensors hain. Pahiya ghoomta hai to dono `0/1` bhejte hain, lekin thoda aage-peeche (90° shift). Dono ko mila kar 2-bit state banti hai: `(A << 1) | B`.
+
+- **Forward:** `00 → 10 → 11 → 01 → 00`
+- **Reverse:** `00 → 01 → 11 → 10 → 00`
+
+Sequence ka order dekh kar pata chalta hai ki direction kya hai.
+
+**QEM table kya hai:** Ye 16 dabbon ki cheat-sheet hai. Purani state aur nayi state ko jod kar 4-bit index banta hai: `index = (prev << 2) | curr`. Us index par pehle se likha hota hai ki `+1`, `-1` ya `0` karna hai.
+
+```
+index: 0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+value: 0 -1 +1  0 +1  0  0 -1 -1  0  0 +1  0 +1 -1  0
+```
+
+- **+1 (forward step):** index 2, 4, 11, 13
+- **-1 (reverse step):** index 1, 7, 8, 14
+- **0:** koi change nahi (0, 5, 10, 15), ya impossible jump jaise `00 → 11` (3, 6, 9, 12). Wo electrical noise hai, ignore karo.
+
+**Ticks kaise badhte-ghatte hain:** Har baar A ya B pin change hone par interrupt chalta hai. Code ye karta hai:
+
+```cpp
+index = (prevState << 2) | currState;
+leftTicks += QEM_TABLE[index];
+prevState = currState;
+```
+
+Forward ghoomne par `+1` judta rehta hai, reverse mein `-1`, aur noise par `0`, isliye count kharab nahi hota.
+
+**"4x" ka matlab:** Hum A aur B dono ke rising aur falling edge ginte hain, to ek cycle mein 4 count milte hain. Isse 7 pulses ki jagah 28 counts per motor rotation milte hain, yaani 4 guna accuracy.
+
+**If-else ki jagah table kyun:** Table mein CPU sawal nahi poochta, seedha `QEM_TABLE[index]` se value utha leta hai. Ye bahut fast hai, aur interrupt ke andar yahi chahiye.

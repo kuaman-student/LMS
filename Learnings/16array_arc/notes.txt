@@ -1,0 +1,18 @@
+we are checking whether the ax and min values given by the aarc has a difference greater than 400
+otherwise it will create a lots of noise when we move : so for this check image4
+
+
+
+this sensor give value in 1-1023, so we have to make it 10bit resolution instead of esp default 12 bit resolution
+ref: https://github.com/Techgeeks-store/ARC16-Sensor-Library/tree/main#what-the-sensor-does
+
+
+
+
+#define PIN_MUX_EN_DUMMY    13      // Hardware EN is tied to GND; dummy pin for ARC16 lib
+we are using a blank pin for en, bcz if not added in library function, library may crash, so why to take risk 😅
+
+
+check https://github.com/Techgeeks-store/ARC16-Sensor-Library/blob/main/src/ARC16.cpp
+readsensor: line 117
+readcaliberated : line 144

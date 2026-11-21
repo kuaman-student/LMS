@@ -1,0 +1,2 @@
+so use long
+long long will waste much memory
