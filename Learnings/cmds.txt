@@ -1,0 +1,8 @@
+New-NetFirewallRule -DisplayName "Teleplot UDP 47269" -Direction Inbound -Protocol UDP -Localport 47269 -Action Allow
+
+
+$u = New-Object System.Net.Sockets.UdpClient; $b=[Text.Encoding]::ASCII.GetBytes("start"); $u.Send($b, $b.length, "192.168.4.1", 8080)
+
+
+
+function send($c){ $u=New-Object System.Net.Sockets.UdpClient; $b=[Text.Encoding]::ASCII.GetBytes($c); $u.Send($b,$b.Length,"192.168.4.1",8080)|Out-Null }

@@ -45,3 +45,17 @@
 #define TRACK_LINE_BLACK    1
 #define DEFAULT_LINE_MODE   TRACK_LINE_WHITE
 #define INCH_FORWARD_MM     15.0f
+
+
+
+// ==================== 3. WIRELESS TELEMETRY & DEFAULT PID GAINS ====================
+#define WIFI_AP_SSID        "LMS_PROJECTX_AP"
+#define WIFI_AP_PASS        "projectx123"       // Min 8 chars required by ESP32 SoftAP
+#define TELNET_PORT         23
+
+// Initial PD/PID & Speed Defaults (Tuned live via Telnet CLI in Phase 06/07)
+#define DEFAULT_KP          0.025f              // Proportional gain (ARC16 error is -16000 to +16000)
+#define DEFAULT_KI          0.000f              // Integral gain (usually 0 for fast maze bots)
+#define DEFAULT_KD          0.180f              // Derivative damping gain
+#define DEFAULT_BASE_PWM    120                 // Safe starting speed (0-255)
+#define MAX_SPRINT_PWM      220                 // High-speed straight corridor cap
