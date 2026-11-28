@@ -22,7 +22,7 @@ void IRAM_ATTR isrLeftEncoder() {
     uint8_t a = digitalRead(PIN_ENC_L_A);
     uint8_t b = digitalRead(PIN_ENC_L_B);
     uint8_t currState = (a << 1) | b;
-    leftTicks += QEM_TABLE[(prevLeftState << 2) | currState];
+    leftTicks = leftTicks + QEM_TABLE[(prevLeftState << 2) | currState];
     prevLeftState = currState;
 }
 
@@ -30,7 +30,7 @@ void IRAM_ATTR isrRightEncoder() {
     uint8_t a = digitalRead(PIN_ENC_R_A);
     uint8_t b = digitalRead(PIN_ENC_R_B);
     uint8_t currState = (a << 1) | b;
-    rightTicks += QEM_TABLE[(prevRightState << 2) | currState];
+    rightTicks = rightTicks + QEM_TABLE[(prevRightState << 2) | currState];
     prevRightState = currState;
 }
 

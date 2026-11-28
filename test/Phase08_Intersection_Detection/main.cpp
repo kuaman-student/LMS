@@ -4,25 +4,17 @@
 #include <ARC16.h>
 #include "Config.h"
 
-// ==================== FALLBACK ENCODER & KINEMATIC CONSTANTS ====================
-#ifndef PIN_ENC_L_A
-#define PIN_ENC_L_A 34
-#define PIN_ENC_L_B 35
-#define PIN_ENC_R_A 36
-#define PIN_ENC_R_B 39
+// ==================== FALLBACK CONSTANTS ====================
+#ifndef END_ZONE_MM
+#define END_ZONE_MM   50.0f
+#endif
+#ifndef DEAD_END_MM
+#define DEAD_END_MM   10.0f
 #endif
 
-const float WHEEL_DIAMETER_MM = 34.0f;     // GA12-N20 standard wheel diameter (adjust if needed)
-const float ENCODER_CPR       = 28.0f * 30.0f; // 4x quadrature CPR * gearbox ratio (update from Phase 03)
-const float TICKS_PER_MM      = ENCODER_CPR / (PI * WHEEL_DIAMETER_MM);
-
-const float INCH_FORWARD_MM   = 15.0f;     // Branch continuity verification distance
-const float END_ZONE_MM       = 50.0f;     // Solid black finish pad confirmation distance
-const float DEAD_END_MM       = 10.0f;     // White floor confirmation distance
-
 // ==================== RUNTIME PARAMETERS ====================
-float Kp          = 0.025f;
-float Kd          = 0.180f;
+float Kp          = DEFAULT_KP;
+float Kd          = DEFAULT_KD;
 int   basePwm     = 110;
 int   steerSign   = 1;
 bool  botRunning  = false;
@@ -43,18 +35,34 @@ bool  seenLeftWing      = false;
 bool  seenRightWing     = false;
 String lastJunctionName = "NONE";
 
-// ==================== QUADRATURE ENCODERS (ISR) ====================
+// ==================== 4x QUADRATURE ENCODERS (QEM TABLE + IRAM ISR) ====================
 volatile long ticksLeft  = 0;
 volatile long ticksRight = 0;
 
+const int8_t QEM_TABLE[16] = {
+     0, -1,  1,  0,
+     1,  0,  0, -1,
+    -1,  0,  0,  1,
+     0,  1, -1,  0
+};
+
+volatile uint8_t prevLeftState  = 0;
+volatile uint8_t prevRightState = 0;
+
 void IRAM_ATTR isrEncLeft() {
-    if (digitalRead(PIN_ENC_L_A) == digitalRead(PIN_ENC_L_B)) ticksLeft++;
-    else ticksLeft--;
+    uint8_t a = digitalRead(PIN_ENC_L_A);
+    uint8_t b = digitalRead(PIN_ENC_L_B);
+    uint8_t currState = (a << 1) | b;
+    ticksLeft = ticksLeft + QEM_TABLE[(prevLeftState << 2) | currState];
+    prevLeftState = currState;
 }
 
 void IRAM_ATTR isrEncRight() {
-    if (digitalRead(PIN_ENC_R_A) == digitalRead(PIN_ENC_R_B)) ticksRight++;
-    else ticksRight--;
+    uint8_t a = digitalRead(PIN_ENC_R_A);
+    uint8_t b = digitalRead(PIN_ENC_R_B);
+    uint8_t currState = (a << 1) | b;
+    ticksRight = ticksRight + QEM_TABLE[(prevRightState << 2) | currState];
+    prevRightState = currState;
 }
 
 long getAverageTicks() {
@@ -157,6 +165,9 @@ ZoneSignature readZones() {
         int val = 0;
         if (span > 50) {
             val = map(constrain(rawValues[i], calMin[i], calMax[i]), calMin[i], calMax[i], 0, 1000);
+            if (DEFAULT_LINE_MODE == TRACK_LINE_WHITE) {
+                val = 1000 - val;
+            }
         }
         if (val < 150) val = 0;
         normValues[i] = val;
@@ -233,11 +244,11 @@ void executeCommand(String cmd) {
     if (cmd.length() == 0) return;
 
     char reply[128];
-    if (cmd.startsWith("set kp "))      { Kp = cmd.substring(7).toFloat(); snprintf(reply, sizeof(reply), "[OK] Kp=%.5f\n", Kp); }
-    else if (cmd.startsWith("set kd ")) { Kd = cmd.substring(7).toFloat(); snprintf(reply, sizeof(reply), "[OK] Kd=%.5f\n", Kd); }
+    if (cmd.startsWith("set kp "))        { Kp = cmd.substring(7).toFloat(); snprintf(reply, sizeof(reply), "[OK] Kp=%.5f\n", Kp); }
+    else if (cmd.startsWith("set kd "))   { Kd = cmd.substring(7).toFloat(); snprintf(reply, sizeof(reply), "[OK] Kd=%.5f\n", Kd); }
     else if (cmd.startsWith("set base ")) { basePwm = constrain(cmd.substring(9).toInt(), 0, 255); snprintf(reply, sizeof(reply), "[OK] Base=%d\n", basePwm); }
-    else if (cmd == "invert")           { steerSign = -steerSign; snprintf(reply, sizeof(reply), "[OK] SteerSign=%d\n", steerSign); }
-    else if (cmd == "cal")              { calibrateArray(); return; }
+    else if (cmd == "invert")             { steerSign = -steerSign; snprintf(reply, sizeof(reply), "[OK] SteerSign=%d\n", steerSign); }
+    else if (cmd == "cal")                { calibrateArray(); return; }
     else if (cmd == "start" || cmd == "resume") {
         prevErr = 0.0f;
         seenLeftWing = false;
@@ -272,13 +283,19 @@ void setup() {
     pinMode(PIN_KEY3, INPUT_PULLUP);
     digitalWrite(PIN_LED3, LOW);
 
-    // Encoders setup
-    pinMode(PIN_ENC_L_A, INPUT_PULLUP);
-    pinMode(PIN_ENC_L_B, INPUT_PULLUP);
-    pinMode(PIN_ENC_R_A, INPUT_PULLUP);
-    pinMode(PIN_ENC_R_B, INPUT_PULLUP);
+    // Encoders setup (GPIO 34, 35, 36, 39 are Input-Only)
+    pinMode(PIN_ENC_L_A, INPUT);
+    pinMode(PIN_ENC_L_B, INPUT);
+    pinMode(PIN_ENC_R_A, INPUT);
+    pinMode(PIN_ENC_R_B, INPUT);
+
+    prevLeftState  = (digitalRead(PIN_ENC_L_A) << 1) | digitalRead(PIN_ENC_L_B);
+    prevRightState = (digitalRead(PIN_ENC_R_A) << 1) | digitalRead(PIN_ENC_R_B);
+
     attachInterrupt(digitalPinToInterrupt(PIN_ENC_L_A), isrEncLeft, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_ENC_L_B), isrEncLeft, CHANGE);
     attachInterrupt(digitalPinToInterrupt(PIN_ENC_R_A), isrEncRight, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_ENC_R_B), isrEncRight, CHANGE);
 
     // Motor driver setup (ESP32 Core v3.x)
     pinMode(PIN_AIN1, OUTPUT);
@@ -300,7 +317,7 @@ void setup() {
     WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASS);
     udp.begin(CMD_LISTEN_PORT);
 
-    Serial.printf("\n[PHASE 08] Intersection & Junction Signature Detector Ready!\n");
+    Serial.printf("\n[PHASE 08] Intersection & Junction Signature Detector Ready (%.2f ticks/mm)!\n", TICKS_PER_MM);
 }
 
 void loop() {
@@ -371,7 +388,6 @@ void loop() {
                     break;
 
                 case STATE_VERIFY_BRANCH: {
-                    // Latch any wing seen during the 15 mm inch-forward window
                     if (z.leftWing)  seenLeftWing = true;
                     if (z.rightWing) seenRightWing = true;
 
@@ -399,7 +415,6 @@ void loop() {
                 case STATE_VERIFY_ENDZONE: {
                     float dist = getDistanceDeltaMm(snapshotTicks);
                     if (z.activeCount < 12) {
-                        // Crossed a perpendicular bar before 50 mm -> it's a CROSS or T-JUNCTION!
                         if (z.center) haltAtJunction("CROSS", dist);
                         else          haltAtJunction("T-JUNCTION", dist);
                     } else if (dist >= END_ZONE_MM) {
@@ -411,7 +426,6 @@ void loop() {
                 case STATE_VERIFY_DEADEND: {
                     float dist = getDistanceDeltaMm(snapshotTicks);
                     if (z.activeCount > 0) {
-                        // False alarm / brief gap
                         currentState = STATE_TRACKING;
                     } else if (dist >= DEAD_END_MM) {
                         haltAtJunction("DEAD-END", dist);
